@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch WebP Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background: linear-gradient(135deg, #1e1e2f 0%, #3a3a5e 100%); font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+        }
+        .drag-active { background: rgba(255, 255, 255, 0.2) !important; border-color: #4ade80 !important; }
+    </style>
+</head>
+<body class="h-screen flex items-center justify-center text-white">
+
+    <div class="glass-panel p-8 w-full max-w-lg mx-4 text-center">
+        
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold mb-2">Multi-Conversor WebP</h1>
+            <p class="text-white/60">Sube hasta 100 imágenes a la vez</p>
+        </div>
+
+        <label id="dropZone" class="block border-2 border-dashed border-white/30 rounded-xl p-12 cursor-pointer hover:bg-white/5 transition-all group">
+            <input type="file" id="fileInput" class="hidden" accept="image/*" multiple>
+            
+            <div id="defaultView">
+                <i class="fa-solid fa-layer-group text-5xl text-blue-400 mb-4 group-hover:scale-110 transition-transform"></i>
+                <p class="font-semibold text-lg">Arrastra tus imágenes aquí</p>
+                <p class="text-sm text-white/50 mt-2">o haz clic para explorar</p>
+            </div>
+
+            <div id="processingView" class="hidden">
+                <i class="fa-solid fa-gear fa-spin text-4xl text-yellow-400 mb-4"></i>
+                <p class="font-medium">Optimizando <span id="countDisplay">0</span> imágenes...</p>
+                <p class="text-xs text-white/50 mt-1">Esto puede tomar unos segundos</p>
+            </div>
+
+            <div id="successView" class="hidden">
+                <i class="fa-solid fa-circle-check text-5xl text-green-400 mb-4"></i>
+                <p class="font-bold text-lg">¡Conversión Completada!</p>
+                <p class="text-sm text-white/70 mt-1" id="resultText">Archivo listo</p>
+            </div>
+        </label>
+
+        <button id="downloadBtn" class="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl hidden transition-colors shadow-lg">
+            <i class="fa-solid fa-download mr-2"></i> <span id="btnText">Descargar</span>
+        </button>
+
+        <button id="resetBtn" class="w-full mt-3 text-white/50 hover:text-white text-sm hidden underline">
+            Convertir más imágenes
+        </button>
+
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        
+        let currentBlob = null;
+        let currentUrl = null;
+
+        // Eventos Drag & Drop
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-active'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-active'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+            handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+
+            // UI: Cargando
+            document.getElementById('defaultView').classList.add('hidden');
+            document.getElementById('successView').classList.add('hidden');
+            document.getElementById('processingView').classList.remove('hidden');
+            document.getElementById('countDisplay').innerText = files.length;
+            downloadBtn.classList.add('hidden');
+
+            const formData = new FormData();
+            // Añadir todos los archivos al FormData
+            for (let i = 0; i < files.length; i++) {
+                formData.append('images', files[i]);
+            }
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Error en el servidor');
+
+                currentBlob = await response.blob();
+                
+                // Determinar si es ZIP o Imagen única
+                const isZip = files.length > 1;
+                const fileName = isZip ? 'imagenes_optimizadas.zip' : files[0].name.split('.')[0] + '.webp';
+
+                // UI: Éxito
+                document.getElementById('processingView').classList.add('hidden');
+                document.getElementById('successView').classList.remove('hidden');
+                document.getElementById('resultText').innerText = isZip ? 'Descarga tu ZIP comprimido' : 'Imagen lista';
+                
+                // Configurar botón
+                document.getElementById('btnText').innerText = isZip ? 'Descargar ZIP' : 'Descargar Imagen';
+                downloadBtn.classList.remove('hidden');
+                resetBtn.classList.remove('hidden');
+
+                // Lógica de descarga
+                downloadBtn.onclick = () => {
+                    if (currentUrl) window.URL.revokeObjectURL(currentUrl);
+                    currentUrl = window.URL.createObjectURL(currentBlob);
+                    const a = document.createElement('a');
+                    a.href = currentUrl;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                };
+
+            } catch (error) {
+                alert('Hubo un error al procesar las imágenes.');
+                location.reload();
+            }
+        }
+
+        resetBtn.onclick = () => {
+            location.reload();
+        }
+    </script>
+</body>
+</html>
